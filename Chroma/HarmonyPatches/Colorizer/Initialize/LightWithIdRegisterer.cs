@@ -3,6 +3,7 @@ using Chroma.Colorizer;
 using Chroma.Lighting;
 using SiraUtil.Affinity;
 using UnityEngine;
+using System;
 
 namespace Chroma.HarmonyPatches.Colorizer.Initialize;
 
@@ -27,10 +28,15 @@ internal class LightWithIdRegisterer : IAffinity
     internal void ForceUnregister(ILightWithId lightWithId)
     {
         int lightId = lightWithId.lightId;
-        List<ILightWithId> lights = _lightWithIdManager._lights[lightId];
-        int index = lights.FindIndex(n => n == lightWithId);
-        lights[index] = null!; // TODO: handle null
-        _tableManager.UnregisterIndex(lightId, index);
+        if (lightId < 0 || lightId >= _lightWithIdManager._oldMapping.Length) return;
+        ILightWithId[] lights = LightRegistry.Get(_lightWithIdManager, lightId).lightInstances;
+        int index = Array.IndexOf(lights, lightWithId);
+        if (index >= 0)
+        {
+            lights[index] = null!;
+            _tableManager.UnregisterIndex(lightId, index);
+        }
+        if (lightWithId.groupId >= 0 && lightWithId.elementId >= 0) _lightWithIdManager.UnregisterLight(lightWithId);
         _colorizerManager.CreateLightColorizerContractByLightID(
             lightId,
             n => n.ChromaLightSwitchEventEffect.UnregisterLight(lightWithId));
@@ -49,25 +55,18 @@ internal class LightWithIdRegisterer : IAffinity
 
     // too lazy to make a transpiler
     [AffinityPrefix]
-    [AffinityPatch(typeof(LightWithIdManager), nameof(LightWithIdManager.SetColorForId))]
+    [AffinityPatch(typeof(LightWithIdManager), nameof(LightWithIdManager.SetColorForId),
+        AffinityMethodType.Normal, null, typeof(LightWithIdManager.LightMapData), typeof(Color))]
     private bool AllowNull(
-        int lightId,
+        LightWithIdManager.LightMapData lightMapData,
         Color color,
-        List<ILightWithId?>?[] ____lights,
-        Color?[] ____colors,
         ref bool ____didChangeSomeColorsThisFrame)
     {
-        ____colors[lightId] = color;
+        lightMapData.color = color;
+        lightMapData.hasColor = true;
         ____didChangeSomeColorsThisFrame = true;
-        ____lights[lightId]
-            ?.ForEach(
-                n =>
-                {
-                    if (n is { isRegistered: true })
-                    {
-                        n.ColorWasSet(color);
-                    }
-                });
+        foreach (ILightWithId light in lightMapData.lightInstances)
+            if (light is { isRegistered: true }) light.ColorWasSet(color);
         return false;
     }
 
@@ -75,6 +74,7 @@ internal class LightWithIdRegisterer : IAffinity
     [AffinityPatch(typeof(LightWithIdManager), nameof(LightWithIdManager.UnregisterLight))]
     private bool DontClearList(ILightWithId lightWithId)
     {
+        if (lightWithId.groupId >= 0 && lightWithId.elementId >= 0) return true;
         lightWithId.__SetIsUnRegistered();
         return false;
     }
@@ -84,10 +84,7 @@ internal class LightWithIdRegisterer : IAffinity
     private void Prefix(
         ref bool __runOriginal,
         LightWithIdManager __instance,
-        ILightWithId lightWithId,
-        List<ILightWithId>?[] ____lights,
-        List<ILightWithId> ____lightsToUnregister,
-        Color?[] ____colors)
+        ILightWithId lightWithId)
     {
         // TODO: figure this shit out
         // for some reason, despite being an affinity patch bound to player, this still runs in the menu scene
@@ -97,6 +94,9 @@ internal class LightWithIdRegisterer : IAffinity
             return;
         }
 
+        // Group/element registration remains owned by the native v4 lighting path.
+        if (lightWithId.groupId >= 0 && lightWithId.elementId >= 0) return;
+
         __runOriginal = false;
 
         if (lightWithId.isRegistered)
@@ -105,26 +105,23 @@ internal class LightWithIdRegisterer : IAffinity
         }
 
         int lightId = lightWithId.lightId;
-        if (lightId == -1)
+        if (lightId < 0 || lightId >= __instance._oldMapping.Length)
         {
             return;
         }
 
-        List<ILightWithId>? lights = ____lights[lightId];
-        if (lights == null)
-        {
-            ____lights[lightId] = lights = new List<ILightWithId>(10);
-        }
+        LightWithIdManager.LightMapData data = LightRegistry.Get(__instance, lightId);
+        ILightWithId[] lights = data.lightInstances;
 
         lightWithId.__SetIsRegistered();
 
-        if (lights.Contains(lightWithId))
+        if (Array.IndexOf(lights, lightWithId) >= 0)
         {
             return;
         }
 
         // TODO: find a better way to register "new" lights to table
-        int index = lights.Count;
+        int index = lights.Length;
         if (_needToRegister.Remove(lightWithId))
         {
             int? tableId = _requestedIds.TryGetValue(lightWithId, out int value) ? value : null;
@@ -136,9 +133,9 @@ internal class LightWithIdRegisterer : IAffinity
             lightId,
             n => n.ChromaLightSwitchEventEffect.RegisterLight(lightWithId, index));
 
-        lights.Add(lightWithId);
-        ____lightsToUnregister.Remove(lightWithId);
-        Color? color = ____colors[lightId];
-        lightWithId.ColorWasSet(color ?? Color.clear);
+        Array.Resize(ref lights, index + 1);
+        lights[index] = lightWithId;
+        data.lightInstances = lights;
+        lightWithId.ColorWasSet(data.hasColor ? data.color : Color.clear);
     }
 }

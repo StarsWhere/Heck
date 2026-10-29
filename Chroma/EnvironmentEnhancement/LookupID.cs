@@ -1,72 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
 namespace Chroma.EnvironmentEnhancement;
 
 internal static class LookupID
 {
-    private const string LOOKUPDLL = "LookupID.dll";
-
-    private static bool _useFallback;
-
-    // this is where i pretend to know what any of this is doing.
     internal static List<GameObjectInfo> Get(
         List<GameObjectInfo> source,
         string[] gameObjectIds,
-        string id,
-        LookupMethod lookupMethod)
-    {
-        if (_useFallback)
-        {
-            return LookupID_Legacy(source, id, lookupMethod);
-        }
-
-        try
-        {
-            int length = gameObjectIds.Length;
-            LookupID_internal(gameObjectIds, length, out IntPtr buffer, ref length, id, lookupMethod);
-
-            int[] arrayRes = new int[length];
-            Marshal.Copy(buffer, arrayRes, 0, length);
-            Marshal.FreeCoTaskMem(buffer);
-
-            List<GameObjectInfo> returnList = new(length);
-            returnList.AddRange(arrayRes.Select(index => source[index]));
-            return returnList;
-        }
-        catch (Exception e)
-        {
-            Plugin.Log.Error("Error running LookupID, falling back to managed code");
-            Plugin.Log.Error("Expect long load times...");
-            Plugin.Log.Error(e);
-
-            _useFallback = true;
-            return LookupID_Legacy(source, id, lookupMethod);
-        }
-    }
-
-    // whatever the fuck rider is recommending causes shit to crash so we disable it
-#pragma warning disable CA2101
-    [DllImport(LOOKUPDLL, CallingConvention = CallingConvention.Cdecl)]
-    private static extern void LookupID_internal(
-        [In] [Out] string[] array,
-        int size,
-        out IntPtr returnArray,
-        ref int returnSize,
-        [MarshalAs(UnmanagedType.LPStr)] string id,
-        LookupMethod method);
-#pragma warning restore CA2101
-
-    // fuck mono regex fuck mono regex fuck mono regex fuck mono regex fuck mono regex
-    // fuck mono regex fuck mono regex fuck mono regex fuck mono regex fuck mono regex
-    // fuck mono regex fuck mono regex fuck mono regex fuck mono regex fuck mono regex
-    // fuck mono regex fuck mono regex fuck mono regex fuck mono regex fuck mono regex
-    // fuck mono regex fuck mono regex fuck mono regex fuck mono regex fuck mono regex
-    private static List<GameObjectInfo> LookupID_Legacy(
-        IEnumerable<GameObjectInfo> source,
         string id,
         LookupMethod lookupMethod)
     {

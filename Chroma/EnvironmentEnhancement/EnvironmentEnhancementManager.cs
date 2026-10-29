@@ -209,6 +209,17 @@ internal class EnvironmentEnhancementManager : IAffinity
                     }
                     else
                     {
+                        // Removing an object that this environment no longer contains is
+                        // already satisfied. Keep transform, duplication and component
+                        // requests strict: those still require an actual target.
+                        if (active == false && gameObjectData.Keys.All(key =>
+                                key == (v2 ? V2_GAMEOBJECT_ID : GAMEOBJECT_ID) ||
+                                key == (v2 ? V2_LOOKUP_METHOD : LOOKUP_METHOD) ||
+                                key == (v2 ? V2_ACTIVE : ACTIVE)))
+                        {
+                            _log.Debug($"Environment removal already satisfied: {id}");
+                            continue;
+                        }
                         throw new InvalidOperationException(
                             $"ID [\"{id}\"] using method [{lookupMethod:G}] found nothing.");
                     }
@@ -383,6 +394,7 @@ internal class EnvironmentEnhancementManager : IAffinity
                 _log.Debug("=====================================");
             }
         }
+        _componentCustomizer.ValidateComponents();
     }
 
     private List<GameObjectInfo> GetAllGameObjects()

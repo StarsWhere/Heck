@@ -15,6 +15,7 @@ internal class LightWithIdCustomizer
     private readonly LightWithIdManager _lightWithIdManager;
     private readonly LightWithIdRegisterer _lightWithIdRegisterer;
     private readonly SiraLog _log;
+    private readonly List<UnityEngine.Transform> _missingLights = new();
 
     [UsedImplicitly]
     private LightWithIdCustomizer(
@@ -29,24 +30,22 @@ internal class LightWithIdCustomizer
         _lightWithIdManager = lightWithIdManager;
     }
 
-    internal void LightWithIdInit(List<UnityEngine.Component> allComponents, CustomData customData)
+    internal void LightWithIdInit(List<UnityEngine.Component> allComponents, CustomData customData, UnityEngine.Transform root)
     {
+        int? lightID = customData.Get<int?>(LIGHT_ID);
+        int? type = customData.Get<int?>(LIGHT_TYPE);
+        if (!type.HasValue && !lightID.HasValue) return;
+
         ILightWithId[] lightWithIds = allComponents
             .OfType<LightWithIds>()
             .SelectMany(n => n._lightWithIds)
             .Cast<ILightWithId>()
-            .Concat(allComponents.OfType<LightWithIdMonoBehaviour>())
+            .Concat(allComponents.OfType<ILightWithId>())
+            .Distinct()
             .ToArray();
         if (lightWithIds.Length == 0)
         {
-            _log.Error($"No [{LIGHT_WITH_ID}] component found");
-            return;
-        }
-
-        int? lightID = customData.Get<int?>(LIGHT_ID);
-        int? type = customData.Get<int?>(LIGHT_TYPE);
-        if (!type.HasValue && !lightID.HasValue)
-        {
+            _missingLights.Add(root);
             return;
         }
 
@@ -98,5 +97,18 @@ internal class LightWithIdCustomizer
                 }
             }
         }
+    }
+
+    internal void ValidateComponents()
+    {
+        foreach (UnityEngine.Transform root in _missingLights.Distinct())
+        {
+            if (root == null) continue;
+            if (root.gameObject.activeInHierarchy)
+                _log.Error($"No [{LIGHT_WITH_ID}] component found on active environment object [{root.name}]");
+            else
+                _log.Debug($"Ignored [{LIGHT_WITH_ID}] customization on removed environment object [{root.name}]");
+        }
+        _missingLights.Clear();
     }
 }

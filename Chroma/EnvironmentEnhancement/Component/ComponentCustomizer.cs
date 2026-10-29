@@ -35,7 +35,7 @@ internal class ComponentCustomizer
         CustomData? lightWithID = customData.Get<CustomData>(LIGHT_WITH_ID);
         if (lightWithID != null)
         {
-            _lightWithIdCustomizer.LightWithIdInit(allComponents, lightWithID);
+            _lightWithIdCustomizer.LightWithIdInit(allComponents, lightWithID, gameObject);
         }
 
         CustomData? bloomFogEnvironment = customData.Get<CustomData>(BLOOM_FOG_ENVIRONMENT);
@@ -50,4 +50,6 @@ internal class ComponentCustomizer
             TubeBloomLightCustomizer.TubeBloomPrePassLightInit(allComponents, tubeBloomPrePassLight);
         }
     }
+
+    internal void ValidateComponents() => _lightWithIdCustomizer.ValidateComponents();
 }
