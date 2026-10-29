@@ -53,78 +53,51 @@ internal class HeckCoroutineEventData : ICustomEventCustomData
     {
         CustomData data = customEventData.customData;
 
-        IEnumerable<Track> tracks = data.GetTrackArray(beatmapTracks, v2);
+        Track[] tracks = data.GetTrackArray(beatmapTracks, v2).ToArray();
 
         IEnumerable<string> propertyKeys = data.Keys.Where(n => _excludedStrings.All(m => m != n)).ToArray();
         List<CoroutineInfo> coroutineInfos = [];
-        foreach (Track track in tracks)
+        bool path = customEventData.eventType switch
         {
-            bool path = customEventData.eventType switch
+            ANIMATE_TRACK => false,
+            ASSIGN_PATH_ANIMATION => true,
+            _ => throw new InvalidOperationException("Custom event was not of correct type.")
+        };
+
+        foreach (string propertyKey in propertyKeys)
+        {
+            IEnumerable<string>? names = v2
+                ? path ? Track.GetPathAliases(propertyKey) : Track.GetAliases(propertyKey)
+                : [propertyKey];
+            bool supported = false;
+            if (names != null)
             {
-                ANIMATE_TRACK => false,
-                ASSIGN_PATH_ANIMATION => true,
-                _ => throw new InvalidOperationException("Custom event was not of correct type.")
-            };
-
-            foreach (string propertyKey in propertyKeys)
-            {
-                if (!v2)
+                foreach (string name in names)
                 {
-                    if (path)
-                    {
-                        HandlePathProperty(propertyKey);
-                    }
-                    else
-                    {
-                        HandleProperty(propertyKey);
-                    }
-                }
-                else
-                {
-                    if (path)
-                    {
-                        Track.GetPathAliases(propertyKey).Do(n => HandlePathProperty(n, propertyKey));
-                    }
-                    else
-                    {
-                        Track.GetAliases(propertyKey).Do(n => HandleProperty(n, propertyKey));
-                    }
-                }
-
-                continue;
-
-                void CreateInfo(BaseProperty property, IPropertyBuilder builder, string name, string? alias)
-                {
-                    CoroutineInfo coroutineInfo = new(
-                        builder.GetPointData(data, alias ?? name, pointDefinitions),
-                        property,
-                        track);
-                    coroutineInfos.Add(coroutineInfo);
-                }
-
-                void HandlePathProperty(string name, string? alias = null)
-                {
-                    IPropertyBuilder? builder = Track.GetPathBuilder(name);
+                    IPropertyBuilder? builder = path ? Track.GetPathBuilder(name) : Track.GetBuilder(name);
                     if (builder == null)
                     {
-                        Plugin.Log.Error($"Could not find path property [{name}]");
-                        return;
+                        continue;
                     }
 
-                    CreateInfo(track.GetOrCreatePathProperty(name, builder), builder, name, alias);
-                }
-
-                void HandleProperty(string name, string? alias = null)
-                {
-                    IPropertyBuilder? builder = Track.GetBuilder(name);
-                    if (builder == null)
+                    supported = true;
+                    foreach (Track track in tracks)
                     {
-                        Plugin.Log.Error($"Could not find property [{name}]");
-                        return;
+                        BaseProperty property = path
+                            ? track.GetOrCreatePathProperty(name, builder)
+                            : track.GetOrCreateProperty(name, builder);
+                        coroutineInfos.Add(new HeckCoroutineEventData.CoroutineInfo(
+                            builder.GetPointData(data, v2 ? propertyKey : name, pointDefinitions),
+                            property,
+                            track));
                     }
-
-                    CreateInfo(track.GetOrCreateProperty(name, builder), builder, name, alias);
                 }
+            }
+
+            if (!supported)
+            {
+                Plugin.Log.Warn(
+                    $"Unsupported property [{propertyKey}] in [{customEventData.eventType}] at [{customEventData.time}] seconds; preserving supported animation properties.");
             }
         }
 

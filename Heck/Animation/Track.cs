@@ -137,7 +137,7 @@ public class Track
     {
         return _aliases.TryGetValue(name, out List<string> aliases)
             ? aliases
-            : throw new InvalidOperationException($"Could not find alias for [{name}].");
+            : null;
     }
 
     internal static IPropertyBuilder? GetBuilder(string name)
@@ -149,7 +149,7 @@ public class Track
     {
         return _pathAliases.TryGetValue(name, out List<string> aliases)
             ? aliases
-            : throw new InvalidOperationException($"Could not find path alias for [{name}].");
+            : null;
     }
 
     internal static IPropertyBuilder? GetPathBuilder(string name)

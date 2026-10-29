@@ -8,23 +8,34 @@ using static Heck.HeckController;
 
 namespace Heck;
 
-internal class CustomDataDeserializer : IObjectsDeserializer, ICustomEventsDeserializer
+internal class CustomDataDeserializer : IEarlyDeserializer, IObjectsDeserializer, ICustomEventsDeserializer
 {
     private readonly CustomBeatmapData _beatmapData;
     private readonly float _bpm;
     private readonly Dictionary<string, List<object>> _pointDefinitions;
     private readonly Dictionary<string, Track> _tracks;
+    private readonly TrackBuilder _trackBuilder;
 
     private CustomDataDeserializer(
         CustomBeatmapData beatmapData,
         Dictionary<string, List<object>> pointDefinitions,
         Dictionary<string, Track> tracks,
-        float bpm)
+        float bpm,
+        TrackBuilder trackBuilder)
     {
         _beatmapData = beatmapData;
         _pointDefinitions = pointDefinitions;
         _tracks = tracks;
         _bpm = bpm;
+        _trackBuilder = trackBuilder;
+    }
+
+    public void DeserializeEarly()
+    {
+        // Animation events can introduce a track before any object is assigned to it.
+        foreach (CustomEventData customEvent in _beatmapData.customEventDatas)
+            if (customEvent.eventType is ANIMATE_TRACK or ASSIGN_PATH_ANIMATION)
+                _trackBuilder.AddManyFromCustomData(customEvent.customData, customEvent.version.IsVersion2());
     }
 
     public Dictionary<CustomEventData, ICustomEventCustomData> DeserializeCustomEvents()

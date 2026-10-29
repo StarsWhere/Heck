@@ -195,7 +195,7 @@ public sealed class TransformControllerFactory : IDisposable
         {
             if (overwrite)
             {
-                _log.Error($"Overwriting existing [{nameof(TransformController)}] on [{gameObject.name}]...");
+                _log.Debug($"Updating [{nameof(TransformController)}] tracks on [{gameObject.name}]");
                 existing.Tracks = track;
             }
             else

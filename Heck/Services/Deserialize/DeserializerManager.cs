@@ -180,11 +180,30 @@ internal class DeserializerManager
             {
                 pointDefinitions.Add(pointDataName, pointData);
             }
+            else if (PointDefinitionsEqual(pointDefinitions[pointDataName], pointData))
+            {
+                _log.Debug($"Identical point definition [{pointDataName}] is already registered");
+            }
             else
             {
                 _log.Error($"Duplicate point defintion name, {pointDataName} could not be registered");
             }
         }
+    }
+
+    internal static bool PointDefinitionsEqual(List<object> left, List<object> right)
+    {
+        if (left.Count != right.Count) return false;
+        for (int i = 0; i < left.Count; i++)
+        {
+            if (left[i] is List<object> leftPoint && right[i] is List<object> rightPoint)
+            {
+                if (!PointDefinitionsEqual(leftPoint, rightPoint)) return false;
+            }
+            else if (!Equals(left[i], right[i])) return false;
+        }
+
+        return true;
     }
 
     internal HashSet<(object? Id, DeserializedData DeserializedData)> EmptyDeserialize()
