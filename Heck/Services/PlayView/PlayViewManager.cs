@@ -28,6 +28,7 @@ public sealed class PlayViewManager : IDisposable
     private bool _modifiedParameters;
 
     private Queue<Action> _transitionFinished = new();
+    private readonly FlowCoordinatorTransitionListener _transitionListener;
 
     [UsedImplicitly]
     private PlayViewManager(
@@ -57,7 +58,8 @@ public sealed class PlayViewManager : IDisposable
         _soloFreePlayFlowCoordinator = soloFreePlayFlowCoordinator;
         _partyFreePlayFlowCoordinator = partyFreePlayFlowCoordinator;
         _gameServerLobbyFlowCoordinator = gameServerLobbyFlowCoordinator;
-        flowCoordinatorTransitionListener.TransitionFinished += OnTransitionFinished;
+        _transitionListener = flowCoordinatorTransitionListener;
+        _transitionListener.TransitionFinished += OnTransitionFinished;
         _lobbyGameStateController = (LobbyGameStateController)lobbyGameStateController;
         _menuTransitionsHelper = menuTransitionsHelper;
     }
@@ -82,6 +84,8 @@ public sealed class PlayViewManager : IDisposable
 
     public void Dispose()
     {
+        _transitionListener.TransitionFinished -= OnTransitionFinished;
+        _transitionFinished.Clear();
         foreach (PlayViewControllerData playViewControllerData in _viewControllers)
         {
             IPlayViewController viewController = playViewControllerData.ViewController;
@@ -255,12 +259,13 @@ public sealed class PlayViewManager : IDisposable
             return;
         }
 
+        PlayViewControllerData active = ActiveView;
+        ActiveView = null;
         _flowCoordinator.DismissViewController(
-            (ViewController)ActiveView.ViewController,
+            (ViewController)active.ViewController,
             ViewController.AnimationDirection.Horizontal,
             null,
             true);
-        ActiveView = null;
     }
 
     private void HandleParametersModified(StartStandardLevelParameters startParameters)

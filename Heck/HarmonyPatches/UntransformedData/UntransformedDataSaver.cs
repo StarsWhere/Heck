@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
+using System.Threading.Tasks;
 using HarmonyLib;
 using IPA.Utilities;
 
@@ -20,6 +21,7 @@ public class HeckGameplayCoreSceneSetupData : GameplayCoreSceneSetupData
             FieldAccessor<GameplayCoreSceneSetupData, BeatmapLevelsModel>.GetAccessor(nameof(_beatmapLevelsModel));
 
     private IReadonlyBeatmapData? _untransformedBeatmapData;
+    internal void SetUntransformedData(IReadonlyBeatmapData data) => _untransformedBeatmapData = data;
 
     public HeckGameplayCoreSceneSetupData(
         GameplayCoreSceneSetupData original)
@@ -99,16 +101,27 @@ public class HeckGameplayCoreSceneSetupData : GameplayCoreSceneSetupData
             .InstructionEnumeration();
     }
 
-    [HarmonyPrefix]
-    [HarmonyPatch(typeof(GameplayCoreSceneSetupData), nameof(TransformBeatmapData))]
-    private static void OverrideGetTransformedBeatmapDataAsync(
+    [HarmonyPostfix]
+    [HarmonyPatch(typeof(GameplayCoreSceneSetupData), nameof(LoadTransformedBeatmapDataAsync))]
+    private static void CaptureLoadResult(
         GameplayCoreSceneSetupData __instance,
-        IReadonlyBeatmapData beatmapData)
+        ref Task __result)
     {
-        if (__instance is HeckGameplayCoreSceneSetupData hecked)
-        {
-            hecked._untransformedBeatmapData = beatmapData;
-        }
+        if (__instance is HeckGameplayCoreSceneSetupData setup)
+            __result = CaptureRawAfterLoad(setup, __result);
+    }
+
+    private static async Task CaptureRawAfterLoad(HeckGameplayCoreSceneSetupData setup, Task load)
+    {
+        await load;
+        if (setup.beatmapLevelData == null) throw new InvalidOperationException("Beatmap level data was not loaded: " + setup.beatmapKey);
+        var key = setup.beatmapKey;
+        IReadonlyBeatmapData? raw = await setup._beatmapDataLoader.LoadBeatmapDataAsync(
+            setup.beatmapLevelData, key, setup.beatmapLevel.beatsPerMinute,
+            setup.beatmapLevel.GetEnvironmentName(key.characteristic, key.difficulty) == setup.targetEnvironmentInfo.serializedName,
+            setup.targetEnvironmentInfo, setup.originalEnvironmentInfo, BeatmapLevelDataVersion.Original,
+            setup.gameplayModifiers, setup.playerSpecificSettings);
+        setup._untransformedBeatmapData = raw ?? throw new InvalidOperationException("Raw beatmap data was not loaded: " + key);
     }
 }
 #endif

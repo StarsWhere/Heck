@@ -12,13 +12,11 @@ using SiraUtil.Logging;
 using UnityEngine;
 using UnityEngine.Scripting;
 using Zenject;
-#if PRE_V1_37_1
 using System.Threading.Tasks;
-#endif
 
 namespace Heck.ReLoad;
 
-public class ReLoader : ITickable
+public class ReLoader : ITickable, IDisposable
 {
     private static readonly FieldAccessor<BeatmapData, ISortedList<BeatmapDataItem>>.Accessor _allBeatmapDataAccessor
         = FieldAccessor<BeatmapData, ISortedList<BeatmapDataItem>>.GetAccessor(nameof(BeatmapData._allBeatmapData));
@@ -78,6 +76,8 @@ public class ReLoader : ITickable
     private readonly bool _reloadable;
 
     private float _songStartTime;
+    private Task? _reloadTask;
+    private bool _disposed;
 
     [UsedImplicitly]
     private ReLoader(
@@ -148,6 +148,17 @@ public class ReLoader : ITickable
 
     public void Tick()
     {
+        if (_disposed) return;
+        if (_reloadTask != null)
+        {
+            if (_reloadTask.IsCompleted)
+            {
+                try { _reloadTask.GetAwaiter().GetResult(); }
+                catch (Exception error) { _log.Error("Beatmap reload failed; gameplay remains paused: " + error); }
+                _reloadTask = null;
+            }
+            return;
+        }
         float increment = _config.ScrubIncrement;
         if (Input.GetKeyDown(_config.SaveTime))
         {
@@ -157,11 +168,8 @@ public class ReLoader : ITickable
         }
         else if (_reloadable && Input.GetKeyDown(_config.Reload))
         {
-            Reload();
-            if (!Input.GetKeyDown(_config.JumpToSavedTime))
-            {
-                Rewind();
-            }
+            _reloadTask = Reload(Input.GetKeyDown(_config.JumpToSavedTime));
+            return;
         }
 
         if (Input.GetKeyDown(_config.JumpToSavedTime))
@@ -198,16 +206,24 @@ public class ReLoader : ITickable
         _customEventDatasAccessor(ref destCustomData) = _customEventDatasAccessor(ref sourceCustomData);
     }
 
-    private void Reload()
+    public void Dispose()
+    {
+        _disposed = true;
+    }
+
+    private async Task Reload(bool jumpToSavedTime)
     {
         bool paused = _gamePause.isPaused;
+        GarbageCollector.Mode previousGCMode=GarbageCollector.GCMode;
         if (!paused)
         {
             _gamePause.Pause();
         }
-
+        GarbageCollector.GCMode=GarbageCollector.Mode.Enabled;
+        try
+        {
 #if !PRE_V1_37_1
-        _reLoaderLoader.Reload();
+        _reLoaderLoader.Reload(_gameplayCoreSceneSetupData.beatmapKey);
         ////_gameplayCoreSceneSetupData.LoadTransformedBeatmapData(); // you wish it was that simple
         ////IReadonlyBeatmapData beatmapData = _gameplayCoreSceneSetupData.transformedBeatmapData;
         BeatmapLevel beatmapLevel = _gameplayCoreSceneSetupData.beatmapLevel;
@@ -223,8 +239,7 @@ public class ReLoader : ITickable
 #else
         EnvironmentInfoSO targetEnvironmentInfo = _gameplayCoreSceneSetupData.environmentInfo;
 #endif
-        IReadonlyBeatmapData beatmapData = _gameplayCoreSceneSetupData.TransformBeatmapData(
-            _gameplayCoreSceneSetupData._beatmapDataLoader.LoadBeatmapData(
+        Task<IReadonlyBeatmapData?> load = _gameplayCoreSceneSetupData._beatmapDataLoader.LoadBeatmapDataAsync(
                 _gameplayCoreSceneSetupData.beatmapLevelData!,
                 beatmapKey,
                 beatsPerMinute,
@@ -235,7 +250,22 @@ public class ReLoader : ITickable
 #endif
                 BeatmapLevelDataVersion.Original,
                 _gameplayCoreSceneSetupData.gameplayModifiers,
-                _gameplayCoreSceneSetupData.playerSpecificSettings)!);
+                _gameplayCoreSceneSetupData.playerSpecificSettings);
+        if (await Task.WhenAny(load, Task.Delay(TimeSpan.FromSeconds(30))) != load)
+        {
+            _ = load.ContinueWith(task => _log.Error("Late beatmap reload failure: " + task.Exception),
+                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously);
+            throw new TimeoutException("Beatmap reload exceeded 30 seconds.");
+        }
+        IReadonlyBeatmapData untransformed = await load ?? throw new InvalidOperationException("Reloaded beatmap data was null.");
+        if (_disposed) return;
+        ((HeckGameplayCoreSceneSetupData)_gameplayCoreSceneSetupData).SetUntransformedData(untransformed);
+        IReadonlyBeatmapData beatmapData = BeatmapDataTransformHelper.CreateTransformedBeatmapData(
+            untransformed, beatmapKey, beatmapLevel,
+            _gameplayCoreSceneSetupData.gameplayModifiers,
+            _gameplayCoreSceneSetupData.playerSpecificSettings,
+            _gameplayCoreSceneSetupData.originalEnvironmentInfo,
+            _gameplayCoreSceneSetupData._settingsManager.settings.quality.screenDisplacementEffects);
 #else
         _reLoaderLoader.Reload(_difficultyBeatmap);
         IReadonlyBeatmapData beatmapData =
@@ -268,10 +298,12 @@ public class ReLoader : ITickable
         deserializedDatas.Do(n => _container.ResolveId<DeserializedData>(n.Id).Remap(n.DeserializedData));
 
         Reloaded?.Invoke();
+        if (jumpToSavedTime) SetSongTime(_songStartTime);
+        Rewind();
 
-        GarbageCollector.GCMode = GarbageCollector.Mode.Enabled;
         GC.Collect();
 
+        if (paused) return;
         if (_pauseMenuManager.enabled)
         {
             _pauseMenuManager.ContinueButtonPressed();
@@ -280,6 +312,8 @@ public class ReLoader : ITickable
         {
             _gamePause.Resume();
         }
+        }
+        finally { if(!_disposed)GarbageCollector.GCMode=previousGCMode; }
     }
 
     private void Rewind(float songTime)

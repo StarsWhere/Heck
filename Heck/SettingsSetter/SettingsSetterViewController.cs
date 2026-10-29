@@ -65,6 +65,7 @@ internal class SettingsSetterViewController : BSMLResourceViewController, IPlayV
 
     private bool _isMultiplayer;
     private bool _declined;
+    private bool _finished;
 
     private OverrideEnvironmentSettings? _cachedOverrideEnvironmentSettings;
 
@@ -99,6 +100,7 @@ internal class SettingsSetterViewController : BSMLResourceViewController, IPlayV
     public bool Init(StartStandardLevelParameters startParameters)
     {
         _declined = true;
+        _finished = false;
 
         // When in doubt, wrap everything in one big try catch statement!
         try
@@ -586,6 +588,8 @@ internal class SettingsSetterViewController : BSMLResourceViewController, IPlayV
     [UIAction("decline-click")]
     private void OnDeclineClick()
     {
+        if (_finished) return;
+        _finished = true;
         if (_defaultParameters == null)
         {
             throw new InvalidOperationException($"[{nameof(_defaultParameters)}] was null.");
@@ -611,6 +615,8 @@ internal class SettingsSetterViewController : BSMLResourceViewController, IPlayV
     [UIAction("accept-click")]
     private void OnAcceptClick()
     {
+        if (_finished) return;
+        _finished = true;
         if (_modifiedParameters == null)
         {
             throw new InvalidOperationException($"[{nameof(_modifiedParameters)}] was null.");

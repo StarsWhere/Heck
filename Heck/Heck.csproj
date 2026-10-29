@@ -20,6 +20,7 @@
     <DependsOn Include="BSIPA" Version="^4.2.2"/>
     <DependsOn Include="CustomJSONData" Version="^2.6.1"/>
     <DependsOn Include="SiraUtil" Version="^3.0.5"/>
+    <DependsOn Include="SongCore" Version="^3.16.0"/>
   </ItemGroup>
 
   <ItemDefinitionGroup>
@@ -27,6 +28,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <Reference Include="0Harmony" HintPath="$(BeatSaberDir)\Libs\0Harmony.dll"/>
+    <Reference Include="SongCore" HintPath="$(BeatSaberDir)\Plugins\SongCore.dll"/>
     <Reference Include="AdditionalContentModel.Interfaces" HintPath="$(BeatSaberDir)\Beat Saber_Data\Managed\AdditionalContentModel.Interfaces.dll"/>
     <Reference Include="BeatmapCore" HintPath="$(BeatSaberDir)\Beat Saber_Data\Managed\BeatmapCore.dll"/>
     <Reference Include="BeatSaber.GameSettings" HintPath="$(BeatSaberDir)\Beat Saber_Data\Managed\BeatSaber.GameSettings.dll" Publicize="true"/>

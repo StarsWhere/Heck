@@ -24,6 +24,12 @@ public class ReLoaderLoader
     {
         _beatmapDataLoader._lastUsedBeatmapDataCache = default;
     }
+
+    public void Reload(BeatmapKey key)
+    {
+        Reload();
+        SongCore.Collections.InvalidateBeatmapData(key);
+    }
 #else
     private static readonly FieldAccessor<CustomDifficultyBeatmap, BeatmapSaveData>.Accessor _beatmapSaveDataAccessor
         = FieldAccessor<CustomDifficultyBeatmap, BeatmapSaveData>.GetAccessor("<beatmapSaveData>k__BackingField");

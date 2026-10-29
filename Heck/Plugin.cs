@@ -41,7 +41,9 @@ internal class Plugin
         zenjector.Install<HeckPlayerInstaller>(Location.Player);
         zenjector.Install<HeckMenuInstaller>(Location.Menu);
         zenjector.UseLogger(pluginLogger);
+#if !V1_45_2
         zenjector.Expose<NoteCutSoundEffectManager>("Gameplay");
+#endif
 
         HeckPatchManager.Register(HARMONY_ID);
 
