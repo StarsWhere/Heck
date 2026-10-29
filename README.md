@@ -62,3 +62,7 @@ Be sure to include a log file when applicable!
 
 I (Aeroluna) am the sole maintainer of all these mods. If you enjoy any of them, please support me over
 at my [Ko-Fi](https://ko-fi.com/aeroluna) as it is all very much appreciated!
+
+## Build for Beat Saber 1.45.2
+
+Run `pwsh -File ./scripts/build.ps1 -GameRoot '<Beat Saber directory>'`. The build uses the installed game and mod assemblies and downloads dnlib 4.5.0 into the repository's temporary cache. The plugin is written to `releases/bs-1.45.2/Plugins/`.
