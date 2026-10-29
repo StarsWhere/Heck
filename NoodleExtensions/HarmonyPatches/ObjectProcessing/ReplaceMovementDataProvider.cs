@@ -95,7 +95,7 @@ internal class ReplaceMovementDataProvider : IAffinity
     [AffinityPrefix]
     [AffinityPatch(
         typeof(BasicBeatmapObjectManager),
-        nameof(BasicBeatmapObjectManager.DespawnInternal),
+        "DespawnInternal",
         AffinityMethodType.Normal,
         null,
         typeof(ObstacleController))]
@@ -110,7 +110,7 @@ internal class ReplaceMovementDataProvider : IAffinity
     [AffinityPrefix]
     [AffinityPatch(
         typeof(BasicBeatmapObjectManager),
-        nameof(BasicBeatmapObjectManager.DespawnInternal),
+        "DespawnInternal",
         AffinityMethodType.Normal,
         null,
         typeof(NoteController))]
@@ -125,7 +125,7 @@ internal class ReplaceMovementDataProvider : IAffinity
     [AffinityPrefix]
     [AffinityPatch(
         typeof(BasicBeatmapObjectManager),
-        nameof(BasicBeatmapObjectManager.DespawnInternal),
+        "DespawnInternal",
         AffinityMethodType.Normal,
         null,
         typeof(SliderController))]

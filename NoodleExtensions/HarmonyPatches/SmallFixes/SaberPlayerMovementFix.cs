@@ -52,7 +52,7 @@ internal class SaberPlayerMovementFix : IAffinity, IDisposable
     }
 
     [AffinityPostfix]
-    [AffinityPatch(typeof(SaberTrail), nameof(SaberTrail.OnDestroy))]
+    [AffinityPatch(typeof(SaberTrail), "OnDestroy")]
     private void CleanupWorldMovement(IBladeMovementData ____movementData)
     {
         if (_local || !_active)

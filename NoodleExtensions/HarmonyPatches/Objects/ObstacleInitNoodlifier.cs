@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
@@ -47,6 +48,7 @@ internal class ObstacleInitNoodlifier : IAffinity, IDisposable
 
     private readonly CodeInstruction _getWorldRotation;
     private readonly ManagedActiveObstacleTracker _obstacleTracker;
+    private readonly Dictionary<ObstacleController, (BoxCollider Collider, bool Enabled)[]> _colliders = new();
 
     private ObstacleInitNoodlifier(
         [Inject(Id = NoodleController.ID)] DeserializedData deserializedData,
@@ -63,9 +65,47 @@ internal class ObstacleInitNoodlifier : IAffinity, IDisposable
 
     public void Dispose()
     {
+        foreach ((BoxCollider collider, bool enabled) in _colliders.Values.SelectMany(states => states))
+        {
+            if (collider != null) collider.enabled = enabled;
+        }
+
+        _colliders.Clear();
         InstanceTranspilers.DisposeDelegate(_getWorldRotation);
         InstanceTranspilers.DisposeDelegate(_getCustomWidth);
         InstanceTranspilers.DisposeDelegate(_getCustomLength);
+    }
+
+    [AffinityPrefix]
+    [AffinityPatch(typeof(ObstacleController), nameof(ObstacleController.Init))]
+    private void PrepareColliders(ObstacleController __instance)
+    {
+        if (!_colliders.TryGetValue(__instance, out (BoxCollider Collider, bool Enabled)[] states))
+        {
+            Transform core = __instance.GetComponent<StretchableObstacle>()._obstacleCore;
+            states = core == null
+                ? []
+                : core.GetComponentsInChildren<BoxCollider>(true).Select(collider => (collider, collider.enabled)).ToArray();
+            _colliders.Add(__instance, states);
+        }
+
+        // A pooled wall can retain a negative transform from its previous use.
+        // Keep shapes disabled until the native resize and Noodle transform reset finish.
+        foreach ((BoxCollider collider, _) in states)
+        {
+            collider.enabled = false;
+        }
+    }
+
+    private void UpdateColliders(ObstacleController instance, ObstacleData obstacleData)
+    {
+        _deserializedData.Resolve(obstacleData, out NoodleObstacleData? noodleData);
+        // Native head and saber interaction uses bounds; decorative walls need no PhysX shape.
+        bool decorative = noodleData is { Fake: true } or { Uninteractable: true };
+        foreach ((BoxCollider collider, bool enabled) in _colliders[instance])
+        {
+            collider.enabled = enabled && !decorative;
+        }
     }
 
     private float GetCustomLength(float @default, ObstacleData obstacleData)
@@ -123,6 +163,7 @@ internal class ObstacleInitNoodlifier : IAffinity, IDisposable
     {
         if (!_deserializedData.Resolve(obstacleData, out NoodleObstacleData? noodleData))
         {
+            UpdateColliders(__instance, obstacleData);
             return;
         }
 
@@ -154,6 +195,7 @@ internal class ObstacleInitNoodlifier : IAffinity, IDisposable
 
         noodleData.InternalLocalRotation = localRotation;
         noodleData.InternalBoundsSize = ____bounds.size;
+        UpdateColliders(__instance, obstacleData);
 
 #if !PRE_V1_40_8
         noodleData.InternalStartPos = obstacleSpawnData.moveOffset;
